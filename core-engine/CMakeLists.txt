@@ -14,13 +14,9 @@ add_executable(core_engine
         com.krd/src/execution/PaperTradeEngine.cpp
         com.krd/src/messaging/TradePublisher.cpp
 
-        com.krd/src/domain/TradeTick.cpp
         com.krd/src/domain/TradeTick.h
-        com.krd/src/domain/FlowSnapshot.cpp
         com.krd/src/domain/FlowSnapshot.h
-        com.krd/src/domain/SignalCandidate.cpp
         com.krd/src/domain/SignalCandidate.h
-        com.krd/src/domain/RegimeSnapshot.cpp
         com.krd/src/domain/RegimeSnapshot.h
 
         com.krd/src/flow/AggressionTracker.cpp
@@ -52,6 +48,13 @@ add_executable(core_engine
         com.krd/src/strategy/regime_hold_continuation/RegimeHoldContinuationStrategy.h
         com.krd/src/strategy/breakout_confirmation/BreakoutConfirmationStrategy.cpp
         com.krd/src/strategy/breakout_confirmation/BreakoutConfirmationStrategy.h
+        com.krd/src/domain/PriceStructureSnapshot.h
+        com.krd/src/domain/BreakoutPhase.h
+        com.krd/src/domain/BreakoutState.h
+        com.krd/src/structure/PriceStructureEngine.h
+        com.krd/src/structure/BreakoutStateEngine.h
+        com.krd/src/structure/PriceStructureEngine.cpp
+        com.krd/src/structure/BreakoutStateEngine.cpp
 )
 
 target_include_directories(core_engine PRIVATE

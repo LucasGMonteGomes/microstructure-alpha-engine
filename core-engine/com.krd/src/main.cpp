@@ -27,6 +27,10 @@
 #include "execution/TestRunPaths.h"
 #include "execution/ExecutionQualityFilter.h"
 #include "strategy/breakout_confirmation/BreakoutConfirmationStrategy.h"
+#include "domain/PriceStructureSnapshot.h"
+#include "domain/BreakoutState.h"
+#include "structure/BreakoutStateEngine.h"
+#include "structure/PriceStructureEngine.h"
 
 using json = nlohmann::json;
 
@@ -140,6 +144,8 @@ void processSnapshot(const MarketSnapshot &snapshot,
                      AggressionTracker &aggressionTracker,
                      SignalPersistenceFilter &persistenceFilter,
                      RegimeFilter &regimeFilter,
+                     PriceStructureEngine &priceStructureEngine,
+                     BreakoutStateEngine &breakoutStateEngine,
                      std::unordered_map<std::string, double> &lastMidPriceByKey) {
     const std::string key = makeKey(snapshot.exchange, snapshot.symbol);
 
@@ -162,10 +168,15 @@ void processSnapshot(const MarketSnapshot &snapshot,
         snapshot.exchange, snapshot.symbol, snapshot.timestampMs, flowSnapshot
     );
 
+    PriceStructureSnapshot priceStructureSnapshot = priceStructureEngine.update(snapshot);
+    BreakoutState breakoutState = breakoutStateEngine.update(snapshot, priceStructureSnapshot);
+
     StrategyContext context;
     context.marketSnapshot = snapshot;
     context.flowSnapshot = flowSnapshot;
     context.regimeSnapshot = regimeSnapshot;
+    context.priceStructureSnapshot = priceStructureSnapshot;
+    context.breakoutState = breakoutState;
     context.recentMoveBps = recentMoveBps;
 
     std::lock_guard<std::mutex> strategyLock(strategy_mutex);
@@ -261,14 +272,17 @@ int main() {
     BreakoutConfirmationStrategy strategy(config);
     ExecutionQualityFilter executionQualityFilter(config);
     PaperTradeEngine paperTradeEngine(config);
+    PriceStructureEngine priceStructureEngine(config);
+    BreakoutStateEngine breakoutStateEngine;
 
         //Configuração de tempo de duração do teste
+    const long testDurationMs = 5L * 60L * 1000L;  // 05 minutos
     //const long testDurationMs = 10L * 60L * 1000L; // 10 minutos
     //const long testDurationMs = 15L * 60L * 1000L; // 15 minutos
     //const long testDurationMs = 20L * 60L * 1000L; // 20 minutos
     //const long testDurationMs = 30L * 60L * 1000L; // 30 minutos
-    //const long testDurationMs = 60L * 60L * 1000L; // 1 hora
-    const long testDurationMs = 3L * 60L * 60L * 1000L; // 3 horas
+    //const long testDurationMs = 60L * 60L * 1000L; // 01 hora
+    //const long testDurationMs = 3L * 60L * 60L * 1000L; // 03 horas
 
     const std::int64_t testStartMs = nowMs();
     const std::int64_t testEndMs = testStartMs + testDurationMs;
@@ -339,6 +353,8 @@ int main() {
                                     aggressionTracker,
                                     persistenceFilter,
                                     regimeFilter,
+                                    priceStructureEngine,
+                                    breakoutStateEngine,
                                     lastMidPriceByKey);
                     return;
                 }
@@ -412,6 +428,8 @@ int main() {
                                     aggressionTracker,
                                     persistenceFilter,
                                     regimeFilter,
+                                    priceStructureEngine,
+                                    breakoutStateEngine,
                                     lastMidPriceByKey);
                     return;
                 }

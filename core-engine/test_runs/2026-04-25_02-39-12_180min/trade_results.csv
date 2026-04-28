@@ -1,0 +1,2 @@
+entry_timestamp_ms,exit_timestamp_ms,exchange,symbol,side,entry_price,exit_price,exit_reason,gross_pnl_pct,fee_pct,slippage_pct,net_pnl_pct,entry_imbalance,entry_confidence
+1777100095573,1777100100765,BYBIT,BTCUSDT,SHORT,77527.9,77525.6,INVALIDATION,0.00283769,0.02,0.005,-0.0221623,0.106045,0.887453
