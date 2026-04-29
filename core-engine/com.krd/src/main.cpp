@@ -26,11 +26,13 @@
 #include "execution/TestSummaryWriter.h"
 #include "execution/TestRunPaths.h"
 #include "execution/ExecutionQualityFilter.h"
-#include "strategy/breakout_confirmation/BreakoutConfirmationStrategy.h"
+#include "strategy/breakout_confirmation_v2/BreakoutConfirmationV2Strategy.h"
 #include "domain/PriceStructureSnapshot.h"
 #include "domain/BreakoutState.h"
 #include "structure/BreakoutStateEngine.h"
 #include "structure/PriceStructureEngine.h"
+#include "execution/SignalDiagnosticsCollector.h"
+#include "execution/SignalDiagnosticsWriter.h"
 
 using json = nlohmann::json;
 
@@ -135,12 +137,13 @@ namespace {
 }
 
 void processSnapshot(const MarketSnapshot &snapshot,
-                     BreakoutConfirmationStrategy &strategy,
+                     BreakoutConfirmationV2Strategy &strategy,
                      ExecutionQualityFilter &executionQualityFilter,
                      PaperTradeEngine &paperTradeEngine,
                      TradePublisher &tradePublisher,
                      TradeStatsCollector &tradeStatsCollector,
                      TradeCsvWriter &tradeCsvWriter,
+                     SignalDiagnosticsCollector &signalDiagnosticsCollector,
                      AggressionTracker &aggressionTracker,
                      SignalPersistenceFilter &persistenceFilter,
                      RegimeFilter &regimeFilter,
@@ -220,6 +223,14 @@ void processSnapshot(const MarketSnapshot &snapshot,
         executionApproved = executionQualityFilter.shouldAllowEntry(snapshot, signal);
     }
 
+    signalDiagnosticsCollector.onSignal(snapshot,
+                                        signal,
+                                        regimeSnapshot,
+                                        priceStructureSnapshot,
+                                        breakoutState,
+                                        persistenceApproved,
+                                        executionApproved);
+
     std::cout << std::fixed << std::setprecision(2)
             << "[SIGNAL] "
             << snapshot.exchange << " "
@@ -246,12 +257,21 @@ void processSnapshot(const MarketSnapshot &snapshot,
             << " persistenceApproved=" << (persistenceApproved ? "true" : "false")
             << " executionApproved=" << (executionApproved ? "true" : "false")
             << " reason=" << signal.reason
+            << " structureRangeBps=" << priceStructureSnapshot.rangeBps
+            << " breakoutDistanceBps=" << priceStructureSnapshot.breakoutDistanceBps
+            << " isBreakoutUp=" << (priceStructureSnapshot.isBreakoutUp ? "true" : "false")
+            << " isBreakoutDown=" << (priceStructureSnapshot.isBreakoutDown ? "true" : "false")
+            << " breakoutActive=" << (breakoutState.active ? "true" : "false")
+            << " breakoutReturnedInside=" << (breakoutState.returnedInsideRange ? "true" : "false")
+            << " breakoutPhase=" << static_cast<int>(breakoutState.phase)
             << std::endl;
 
     if (regimeSnapshot.tradable &&
         persistenceApproved &&
         executionApproved &&
         paperTradeEngine.tryOpenPosition(snapshot, signal)) {
+        breakoutStateEngine.markEntryConsumed(snapshot.exchange, snapshot.symbol);
+
         const Position &pos = paperTradeEngine.getOpenPosition();
 
         std::cout << std::fixed << std::setprecision(6)
@@ -269,15 +289,15 @@ void processSnapshot(const MarketSnapshot &snapshot,
 
 int main() {
     Config config;
-    BreakoutConfirmationStrategy strategy(config);
+    BreakoutConfirmationV2Strategy strategy(config);
     ExecutionQualityFilter executionQualityFilter(config);
     PaperTradeEngine paperTradeEngine(config);
     PriceStructureEngine priceStructureEngine(config);
     BreakoutStateEngine breakoutStateEngine;
 
-        //Configuração de tempo de duração do teste
-    const long testDurationMs = 5L * 60L * 1000L;  // 05 minutos
-    //const long testDurationMs = 10L * 60L * 1000L; // 10 minutos
+    //Configuração de tempo de duração do teste
+    const long testDurationMs = 5L * 60L * 1000L; // 05 minutos
+    //onst long testDurationMs = 10L * 60L * 1000L; // 10 minutos
     //const long testDurationMs = 15L * 60L * 1000L; // 15 minutos
     //const long testDurationMs = 20L * 60L * 1000L; // 20 minutos
     //const long testDurationMs = 30L * 60L * 1000L; // 30 minutos
@@ -291,6 +311,8 @@ int main() {
 
     TradeStatsCollector tradeStatsCollector;
     TradeCsvWriter tradeCsvWriter(testRunPaths.tradeResultsCsvPath);
+
+    SignalDiagnosticsCollector signalDiagnosticsCollector;
 
     // janela de 5 segundos para fluxo agressor
     AggressionTracker aggressionTracker(5000);
@@ -350,6 +372,7 @@ int main() {
                                     tradePublisher,
                                     tradeStatsCollector,
                                     tradeCsvWriter,
+                                    signalDiagnosticsCollector,
                                     aggressionTracker,
                                     persistenceFilter,
                                     regimeFilter,
@@ -425,6 +448,7 @@ int main() {
                                     tradePublisher,
                                     tradeStatsCollector,
                                     tradeCsvWriter,
+                                    signalDiagnosticsCollector,
                                     aggressionTracker,
                                     persistenceFilter,
                                     regimeFilter,
@@ -472,16 +496,21 @@ int main() {
     bybit_ws.stop();
 
     const bool summaryWritten =
-        TestSummaryWriter::writeSummary(testRunPaths.testSummaryCsvPath,
-                                        tradeStatsCollector,
-                                        testDurationMs,
-                                        testStartMs,
-                                        testEndMs);
+            TestSummaryWriter::writeSummary(testRunPaths.testSummaryCsvPath,
+                                            tradeStatsCollector,
+                                            testDurationMs,
+                                            testStartMs,
+                                            testEndMs);
+
+    const bool diagnosticSummaryWritten =
+            SignalDiagnosticsWriter::writeSummary(testRunPaths.diagnosticSummaryCsvPath,
+                                                  signalDiagnosticsCollector);
 
     std::cout << "\n[TEST OUTPUT]\n"
-          << "runDirectory=" << testRunPaths.runDirectory << "\n"
-          << "tradeResultsCsvPath=" << testRunPaths.tradeResultsCsvPath << "\n"
-          << "testSummaryCsvPath=" << testRunPaths.testSummaryCsvPath << "\n";
+            << "runDirectory=" << testRunPaths.runDirectory << "\n"
+            << "tradeResultsCsvPath=" << testRunPaths.tradeResultsCsvPath << "\n"
+            << "testSummaryCsvPath=" << testRunPaths.testSummaryCsvPath << "\n"
+            << "diagnosticSummaryCsvPath=" << testRunPaths.diagnosticSummaryCsvPath << "\n";
 
     std::cout << "\n[TEST SUMMARY]\n"
 
@@ -498,7 +527,10 @@ int main() {
             << "averageNetPnlPct=" << tradeStatsCollector.getAverageNetPnlPct() << "\n"
             << "tradeCsvOpen=" << (tradeCsvWriter.isOpen() ? "true" : "false") << "\n"
             << "summaryWritten=" << (summaryWritten ? "true" : "false") << "\n"
+            << "diagnosticSummaryWritten=" << (diagnosticSummaryWritten ? "true" : "false") << "\n"
             << std::endl;
+
+    signalDiagnosticsCollector.printSummary();
 
     ix::uninitNetSystem();
     return 0;

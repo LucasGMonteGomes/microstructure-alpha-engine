@@ -46,8 +46,6 @@ add_executable(core_engine
 
         com.krd/src/strategy/regime_hold_continuation/RegimeHoldContinuationStrategy.cpp
         com.krd/src/strategy/regime_hold_continuation/RegimeHoldContinuationStrategy.h
-        com.krd/src/strategy/breakout_confirmation/BreakoutConfirmationStrategy.cpp
-        com.krd/src/strategy/breakout_confirmation/BreakoutConfirmationStrategy.h
         com.krd/src/domain/PriceStructureSnapshot.h
         com.krd/src/domain/BreakoutPhase.h
         com.krd/src/domain/BreakoutState.h
@@ -55,6 +53,12 @@ add_executable(core_engine
         com.krd/src/structure/BreakoutStateEngine.h
         com.krd/src/structure/PriceStructureEngine.cpp
         com.krd/src/structure/BreakoutStateEngine.cpp
+        com.krd/src/strategy/breakout_confirmation_v2/BreakoutConfirmationV2Strategy.cpp
+        com.krd/src/strategy/breakout_confirmation_v2/BreakoutConfirmationV2Strategy.h
+        com.krd/src/execution/SignalDiagnosticsCollector.cpp
+        com.krd/src/execution/SignalDiagnosticsCollector.h
+        com.krd/src/execution/SignalDiagnosticsWriter.cpp
+        com.krd/src/execution/SignalDiagnosticsWriter.h
 )
 
 target_include_directories(core_engine PRIVATE

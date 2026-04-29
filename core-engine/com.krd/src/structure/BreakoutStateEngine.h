@@ -12,6 +12,8 @@ public:
     BreakoutState update(const MarketSnapshot& snapshot,
                          const PriceStructureSnapshot& structure);
 
+    void markEntryConsumed(const std::string& exchange, const std::string& symbol);
+
 private:
     std::unordered_map<std::string, BreakoutState> stateByKey_;
 

@@ -19,6 +19,7 @@ struct BreakoutState {
 
     bool returnedInsideRange{false};
     bool active{false};
+    bool entryConsumed{false};
 
     std::int64_t breakTimestampMs{0};
 };

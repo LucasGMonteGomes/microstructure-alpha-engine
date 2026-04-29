@@ -6,6 +6,7 @@ struct TestRunPaths {
     std::string runDirectory;
     std::string tradeResultsCsvPath;
     std::string testSummaryCsvPath;
+    std::string diagnosticSummaryCsvPath;
 };
 
 class TestRunPathsBuilder {

@@ -9,7 +9,7 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
     const std::string key = makeKey(snapshot.exchange, snapshot.symbol);
     auto& history = historyByKey_[key];
 
-    history.push_back(PricePoint{snapshot.midPrice, snapshot.timestampMs});
+    // Primeiro, limpa o histórico antigo
     trimHistory(history, snapshot.timestampMs);
 
     PriceStructureSnapshot structure;
@@ -17,10 +17,23 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
     structure.symbol = snapshot.symbol;
     structure.timestampMs = snapshot.timestampMs;
 
+    // Se ainda não há histórico suficiente, só armazena o preço atual e retorna
     if (history.empty()) {
+        history.push_back(PricePoint{snapshot.midPrice, snapshot.timestampMs});
+
+        structure.recentHigh = snapshot.midPrice;
+        structure.recentLow = snapshot.midPrice;
+        structure.midRangePrice = snapshot.midPrice;
+        structure.rangeBps = 0.0;
+        structure.breakoutDistanceBps = 0.0;
+        structure.isCompressed = true;
+        structure.isBreakoutUp = false;
+        structure.isBreakoutDown = false;
+
         return structure;
     }
 
+    // Calcula a faixa ANTERIOR sem incluir o preço atual
     double recentHigh = history.front().price;
     double recentLow = history.front().price;
 
@@ -34,21 +47,29 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
     structure.midRangePrice = (recentHigh + recentLow) / 2.0;
     structure.rangeBps = calculateRangeBps(recentLow, recentHigh);
 
+    // Compressão: faixa curta o suficiente para um breakout ser relevante
     structure.isCompressed = structure.rangeBps <= 8.0;
 
+    // Agora sim compara o preço atual contra a faixa anterior
     if (snapshot.midPrice > recentHigh) {
         structure.isBreakoutUp = true;
+        structure.isBreakoutDown = false;
         structure.breakoutDistanceBps =
             calculateBreakoutDistanceBps(recentHigh, snapshot.midPrice);
     } else if (snapshot.midPrice < recentLow) {
+        structure.isBreakoutUp = false;
         structure.isBreakoutDown = true;
         structure.breakoutDistanceBps =
-            calculateBreakoutDistanceBps(recentLow, snapshot.midPrice);
+            std::abs(calculateBreakoutDistanceBps(recentLow, snapshot.midPrice));
     } else {
         structure.isBreakoutUp = false;
         structure.isBreakoutDown = false;
         structure.breakoutDistanceBps = 0.0;
     }
+
+    // Só depois de calcular a estrutura, adiciona o preço atual ao histórico
+    history.push_back(PricePoint{snapshot.midPrice, snapshot.timestampMs});
+    trimHistory(history, snapshot.timestampMs);
 
     return structure;
 }

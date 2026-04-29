@@ -23,6 +23,7 @@ BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
             state.lowestPriceAfterBreak = snapshot.midPrice;
             state.returnedInsideRange = false;
             state.active = true;
+            state.entryConsumed = false;
             state.breakTimestampMs = snapshot.timestampMs;
             return state;
         }
@@ -38,13 +39,14 @@ BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
 
     if (structure.isBreakoutDown) {
         if (!state.active || state.phase == BreakoutPhase::IDLE || state.phase == BreakoutPhase::FAILED) {
-            state.phase = BreakoutPhase::BREAK_DOWN;
+            state.phase = BreakoutPhase::BREAK_UP;
             state.breakPrice = snapshot.midPrice;
             state.lastConfirmedPrice = snapshot.midPrice;
             state.highestPriceAfterBreak = snapshot.midPrice;
             state.lowestPriceAfterBreak = snapshot.midPrice;
             state.returnedInsideRange = false;
             state.active = true;
+            state.entryConsumed = false;
             state.breakTimestampMs = snapshot.timestampMs;
             return state;
         }
@@ -87,4 +89,16 @@ BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
 std::string BreakoutStateEngine::makeKey(const std::string& exchange,
                                          const std::string& symbol) const {
     return exchange + "|" + symbol;
+}
+
+void BreakoutStateEngine::markEntryConsumed(const std::string& exchange,
+                                            const std::string& symbol) {
+    const std::string key = makeKey(exchange, symbol);
+    auto it = stateByKey_.find(key);
+
+    if (it == stateByKey_.end()) {
+        return;
+    }
+
+    it->second.entryConsumed = true;
 }

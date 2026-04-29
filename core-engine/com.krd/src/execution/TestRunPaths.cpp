@@ -54,6 +54,7 @@ TestRunPaths TestRunPathsBuilder::build(long testDurationMs) {
     paths.runDirectory = runDir.string();
     paths.tradeResultsCsvPath = (runDir / "trade_results.csv").string();
     paths.testSummaryCsvPath = (runDir / "test_summary.csv").string();
+    paths.diagnosticSummaryCsvPath = (runDir / "diagnostic_summary.csv").string();
 
     return paths;
 }
