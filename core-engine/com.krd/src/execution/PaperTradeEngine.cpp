@@ -65,15 +65,33 @@ std::optional<TradeResult> PaperTradeEngine::update(const MarketSnapshot& snapsh
         }
     }
 
+    // Invalidação por fluxo desativada temporariamente.
+    // O objetivo agora é deixar a operação chegar em TAKE_PROFIT, STOP_LOSS ou TIMEOUT.
+    /*
     if (shouldExitEarly(latestSignal)) {
         return closePosition(snapshot, ExitReason::INVALIDATION);
     }
+    */
 
     if (snapshot.timestampMs >= currentPosition_.timeoutTimestampMs) {
         return closePosition(snapshot, ExitReason::TIMEOUT);
     }
 
     return std::nullopt;
+}
+
+std::optional<TradeResult> PaperTradeEngine::forceClosePosition(const MarketSnapshot& snapshot,
+                                                                ExitReason reason) {
+    if (!currentPosition_.isOpen) {
+        return std::nullopt;
+    }
+
+    if (snapshot.exchange != currentPosition_.exchange ||
+        snapshot.symbol != currentPosition_.symbol) {
+        return std::nullopt;
+        }
+
+    return closePosition(snapshot, reason);
 }
 
 double PaperTradeEngine::calculateGrossPnlPct(const Position& position, double exitPrice) const {

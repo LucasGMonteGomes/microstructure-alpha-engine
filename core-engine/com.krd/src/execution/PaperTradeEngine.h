@@ -20,6 +20,9 @@ public:
     std::optional<TradeResult> update(const MarketSnapshot& snapshot,
                                       const SignalResult& latestSignal);
 
+    std::optional<TradeResult> forceClosePosition(const MarketSnapshot& snapshot,
+                                                  ExitReason reason);
+
 private:
     const Config& config_;
     Position currentPosition_;

@@ -82,14 +82,14 @@ SignalResult BreakoutConfirmationV2Strategy::evaluate(const StrategyContext &con
         return result;
     }
 
-    if (result.confidence < 0.30) {
+    if (result.confidence < config_.minConfidence) {
         result.side = SignalSide::HOLD;
         result.reason = "breakout confirmation v2 confidence below min";
         result.isValid = false;
         return result;
     }
 
-    if (result.expectedMoveBps < 18.0) {
+    if (result.expectedMoveBps < config_.minExpectedMoveBps) {
         result.side = SignalSide::HOLD;
         result.reason = "breakout confirmation v2 expected move below min";
         result.isValid = false;
@@ -124,34 +124,28 @@ bool BreakoutConfirmationV2Strategy::isRegimeSupportive(const StrategyContext &c
     return context.regimeSnapshot.tradable;
 }
 
-bool BreakoutConfirmationV2Strategy::isBreakoutUpValid(const StrategyContext& context) const {
-    const auto& structure = context.priceStructureSnapshot;
-    const auto& breakoutState = context.breakoutState;
+bool BreakoutConfirmationV2Strategy::isBreakoutUpValid(const StrategyContext &context) const {
+    const auto &structure = context.priceStructureSnapshot;
+    const auto &breakoutState = context.breakoutState;
 
     const bool stateValid =
-        breakoutState.active &&
-        !breakoutState.entryConsumed &&
-        breakoutState.phase != BreakoutPhase::FAILED &&
-        (breakoutState.phase == BreakoutPhase::BREAK_UP ||
-         breakoutState.phase == BreakoutPhase::HOLD_UP ||
-         breakoutState.phase == BreakoutPhase::CONFIRMED_UP);
+            breakoutState.active &&
+            !breakoutState.entryConsumed &&
+            breakoutState.phase == BreakoutPhase::CONFIRMED_UP;
 
     return stateValid &&
            structure.rangeBps >= 0.20 &&
            structure.rangeBps <= 8.0;
 }
 
-bool BreakoutConfirmationV2Strategy::isBreakoutDownValid(const StrategyContext& context) const {
-    const auto& structure = context.priceStructureSnapshot;
-    const auto& breakoutState = context.breakoutState;
+bool BreakoutConfirmationV2Strategy::isBreakoutDownValid(const StrategyContext &context) const {
+    const auto &structure = context.priceStructureSnapshot;
+    const auto &breakoutState = context.breakoutState;
 
     const bool stateValid =
-        breakoutState.active &&
-        !breakoutState.entryConsumed &&
-        breakoutState.phase != BreakoutPhase::FAILED &&
-        (breakoutState.phase == BreakoutPhase::BREAK_DOWN ||
-         breakoutState.phase == BreakoutPhase::HOLD_DOWN ||
-         breakoutState.phase == BreakoutPhase::CONFIRMED_DOWN);
+            breakoutState.active &&
+            !breakoutState.entryConsumed &&
+            breakoutState.phase == BreakoutPhase::CONFIRMED_DOWN;
 
     return stateValid &&
            structure.rangeBps >= 0.20 &&
@@ -159,21 +153,21 @@ bool BreakoutConfirmationV2Strategy::isBreakoutDownValid(const StrategyContext& 
 }
 
 bool BreakoutConfirmationV2Strategy::isFlowConfirmingUp(const StrategyContext &context) const {
-    return context.flowSnapshot.aggressionBias <= -0.68 &&
-           context.flowSnapshot.totalAggressionQty >= 0.02;
+    return context.flowSnapshot.aggressionBias >= config_.minFlowBiasAbs &&
+           context.flowSnapshot.totalAggressionQty >= config_.minFlowStrength;
 }
 
 bool BreakoutConfirmationV2Strategy::isFlowConfirmingDown(const StrategyContext &context) const {
-    return context.flowSnapshot.aggressionBias <= -0.68 &&
-           context.flowSnapshot.totalAggressionQty >= 1.0;
+    return context.flowSnapshot.aggressionBias <= -config_.minFlowBiasAbs &&
+           context.flowSnapshot.totalAggressionQty >= config_.minFlowStrength;
 }
 
 bool BreakoutConfirmationV2Strategy::isBookSupportiveUp(const StrategyContext &context) const {
-    return context.marketSnapshot.imbalance >= 58.0;
+    return context.marketSnapshot.imbalance >= config_.imbalanceLongThreshold;
 }
 
 bool BreakoutConfirmationV2Strategy::isBookSupportiveDown(const StrategyContext &context) const {
-    return context.marketSnapshot.imbalance <= 42.0;
+    return context.marketSnapshot.imbalance <= config_.imbalanceShortThreshold;
 }
 
 bool BreakoutConfirmationV2Strategy::isBreakoutStateUsableUp(const StrategyContext &context) const {

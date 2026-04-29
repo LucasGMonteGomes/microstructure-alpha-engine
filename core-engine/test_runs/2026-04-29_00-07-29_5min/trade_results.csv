@@ -1,0 +1,2 @@
+entry_timestamp_ms,exit_timestamp_ms,exchange,symbol,side,entry_price,exit_price,exit_reason,gross_pnl_pct,fee_pct,slippage_pct,net_pnl_pct,entry_imbalance,entry_confidence
+1777432053393,1777432349674,BYBIT,ETHUSDT,SHORT,2289.31,2291.85,TIMEOUT,-0.110951,0.02,0.005,-0.135951,0.452766,0.419269

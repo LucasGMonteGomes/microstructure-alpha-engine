@@ -39,7 +39,7 @@ BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
 
     if (structure.isBreakoutDown) {
         if (!state.active || state.phase == BreakoutPhase::IDLE || state.phase == BreakoutPhase::FAILED) {
-            state.phase = BreakoutPhase::BREAK_UP;
+            state.phase = BreakoutPhase::BREAK_DOWN;
             state.breakPrice = snapshot.midPrice;
             state.lastConfirmedPrice = snapshot.midPrice;
             state.highestPriceAfterBreak = snapshot.midPrice;

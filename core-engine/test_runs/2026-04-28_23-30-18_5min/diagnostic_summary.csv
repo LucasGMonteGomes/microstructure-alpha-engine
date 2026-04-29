@@ -1,0 +1,31 @@
+metric,value
+total_signals,42978
+valid_signals,106
+hold_signals,42872
+persistence_approved_count,106
+execution_approved_count,106
+breakout_up_count,213
+breakout_down_count,209
+breakout_active_count,15420
+breakout_returned_inside_count,42751
+phase_idle_count,27500
+phase_break_up_count,41
+phase_break_down_count,17
+phase_hold_up_count,9329
+phase_hold_down_count,5673
+phase_confirmed_up_count,172
+phase_confirmed_down_count,188
+phase_failed_count,58
+avg_confidence,0.343797
+max_confidence,0.753275
+avg_expected_move_bps,19.1136
+max_expected_move_bps,80.8884
+
+reason,count
+"no valid breakout structure",40610
+"regime not tradable",2125
+"up breakout not fully confirmed",68
+"breakout confirmation v2 down detected",67
+"down breakout not fully confirmed",58
+"breakout confirmation v2 up detected",39
+"breakout confirmation v2 expected move below min",11
