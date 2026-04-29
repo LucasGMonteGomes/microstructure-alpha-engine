@@ -59,6 +59,7 @@ add_executable(core_engine
         com.krd/src/execution/SignalDiagnosticsCollector.h
         com.krd/src/execution/SignalDiagnosticsWriter.cpp
         com.krd/src/execution/SignalDiagnosticsWriter.h
+        com.krd/src/config/StrategyConfig.h
 )
 
 target_include_directories(core_engine PRIVATE

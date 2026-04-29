@@ -9,7 +9,7 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
     const std::string key = makeKey(snapshot.exchange, snapshot.symbol);
     auto& history = historyByKey_[key];
 
-    // Primeiro, limpa o histórico antigo
+    // Remove pontos mais antigos que a janela configurada
     trimHistory(history, snapshot.timestampMs);
 
     PriceStructureSnapshot structure;
@@ -17,7 +17,7 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
     structure.symbol = snapshot.symbol;
     structure.timestampMs = snapshot.timestampMs;
 
-    // Se ainda não há histórico suficiente, só armazena o preço atual e retorna
+    // Sem histórico anterior: armazena o preço atual e retorna estrutura neutra
     if (history.empty()) {
         history.push_back(PricePoint{snapshot.midPrice, snapshot.timestampMs});
 
@@ -33,7 +33,7 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
         return structure;
     }
 
-    // Calcula a faixa ANTERIOR sem incluir o preço atual
+    // Calcula a faixa com base no histórico ANTERIOR (sem incluir o preço atual)
     double recentHigh = history.front().price;
     double recentLow = history.front().price;
 
@@ -47,10 +47,10 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
     structure.midRangePrice = (recentHigh + recentLow) / 2.0;
     structure.rangeBps = calculateRangeBps(recentLow, recentHigh);
 
-    // Compressão: faixa curta o suficiente para um breakout ser relevante
-    structure.isCompressed = structure.rangeBps <= 8.0;
+    // Compressão: faixa dentro do limite máximo configurado
+    structure.isCompressed = structure.rangeBps <= config_.priceStructureWindowMs;
 
-    // Agora sim compara o preço atual contra a faixa anterior
+    // Compara o preço atual contra a faixa anterior para detectar breakout
     if (snapshot.midPrice > recentHigh) {
         structure.isBreakoutUp = true;
         structure.isBreakoutDown = false;
@@ -67,7 +67,7 @@ PriceStructureSnapshot PriceStructureEngine::update(const MarketSnapshot& snapsh
         structure.breakoutDistanceBps = 0.0;
     }
 
-    // Só depois de calcular a estrutura, adiciona o preço atual ao histórico
+    // Adiciona o preço atual ao histórico após calcular a estrutura
     history.push_back(PricePoint{snapshot.midPrice, snapshot.timestampMs});
     trimHistory(history, snapshot.timestampMs);
 
@@ -81,11 +81,9 @@ std::string PriceStructureEngine::makeKey(const std::string& exchange,
 
 void PriceStructureEngine::trimHistory(std::deque<PricePoint>& history,
                                        std::int64_t nowMs) const {
-    const std::int64_t windowMs = 30 * 1000;
-
     while (!history.empty()) {
         const auto ageMs = nowMs - history.front().timestampMs;
-        if (ageMs <= windowMs) {
+        if (ageMs <= config_.priceStructureWindowMs) {
             break;
         }
         history.pop_front();

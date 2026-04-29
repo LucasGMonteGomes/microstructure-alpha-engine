@@ -1,16 +1,33 @@
 #pragma once
 
-#include "../../config/Config.h"
+#include "../../config/StrategyConfig.h"
 #include "../common/ISignalStrategy.h"
+
+// =============================================================================
+// RegimeHoldContinuationStrategy
+//
+// Responsabilidade: gerar sinal quando o regime de mercado está ativo e o
+// fluxo, book e movimento recente estão todos alinhados na mesma direção.
+//
+// Condições para sinal LONG:
+//   - Regime tradable e forte (shortRangeBps + activityBps acima do mínimo)
+//   - Spread aceitável
+//   - Fluxo agressor confirmando compra
+//   - Book com imbalance favorável a compra
+//   - Movimento recente positivo dentro do limite
+//   - Confiança acima do mínimo
+//
+// Condições para sinal SHORT: simétricas para baixo.
+// =============================================================================
 
 class RegimeHoldContinuationStrategy : public ISignalStrategy {
 public:
-    explicit RegimeHoldContinuationStrategy(const Config& config);
+    explicit RegimeHoldContinuationStrategy(const StrategyConfig& config);
 
     SignalResult evaluate(const StrategyContext& context) const override;
 
 private:
-    const Config& config_;
+    const StrategyConfig& config_;
 
     bool isSpreadAcceptable(const StrategyContext& context) const;
     bool isRegimeStrongEnough(const StrategyContext& context) const;

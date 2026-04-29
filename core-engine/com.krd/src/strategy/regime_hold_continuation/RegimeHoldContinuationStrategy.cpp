@@ -3,18 +3,21 @@
 #include <algorithm>
 #include <cmath>
 
-RegimeHoldContinuationStrategy::RegimeHoldContinuationStrategy(const Config& config)
+RegimeHoldContinuationStrategy::RegimeHoldContinuationStrategy(const StrategyConfig& config)
     : config_(config) {}
 
 SignalResult RegimeHoldContinuationStrategy::evaluate(const StrategyContext& context) const {
     SignalResult result;
 
-    const auto& snapshot = context.marketSnapshot;
     const auto& flow = context.flowSnapshot;
     const auto& regime = context.regimeSnapshot;
 
     result.flowBias = flow.aggressionBias;
     result.flowStrength = flow.totalAggressionQty;
+
+    // ------------------------------------------------------------------
+    // Filtros obrigatórios — rejeição imediata
+    // ------------------------------------------------------------------
 
     if (!regime.tradable) {
         result.side = SignalSide::HOLD;
@@ -43,17 +46,29 @@ SignalResult RegimeHoldContinuationStrategy::evaluate(const StrategyContext& con
         return result;
     }
 
-    const bool longFlow = isLongFlowAligned(context);
+    // ------------------------------------------------------------------
+    // Avaliação de confirmações por direção
+    // ------------------------------------------------------------------
+
+    const bool longFlow  = isLongFlowAligned(context);
     const bool shortFlow = isShortFlowAligned(context);
 
-    const bool longBook = isLongBookAligned(context);
+    const bool longBook  = isLongBookAligned(context);
     const bool shortBook = isShortBookAligned(context);
 
-    const bool longMove = isLongMoveConfirmed(context);
+    const bool longMove  = isLongMoveConfirmed(context);
     const bool shortMove = isShortMoveConfirmed(context);
+
+    // ------------------------------------------------------------------
+    // Cálculo de qualidade do sinal
+    // ------------------------------------------------------------------
 
     result.confidence = calculateConfidence(context);
     result.expectedMoveBps = calculateExpectedMoveBps(context);
+
+    // ------------------------------------------------------------------
+    // Sem fluxo alinhado
+    // ------------------------------------------------------------------
 
     if (!longFlow && !shortFlow) {
         result.side = SignalSide::HOLD;
@@ -62,12 +77,20 @@ SignalResult RegimeHoldContinuationStrategy::evaluate(const StrategyContext& con
         return result;
     }
 
+    // ------------------------------------------------------------------
+    // Confirmação incompleta para LONG
+    // ------------------------------------------------------------------
+
     if (longFlow && (!longBook || !longMove)) {
         result.side = SignalSide::HOLD;
         result.reason = "long regime hold continuation not aligned";
         result.isValid = false;
         return result;
     }
+
+    // ------------------------------------------------------------------
+    // Confirmação incompleta para SHORT
+    // ------------------------------------------------------------------
 
     if (shortFlow && (!shortBook || !shortMove)) {
         result.side = SignalSide::HOLD;
@@ -76,7 +99,11 @@ SignalResult RegimeHoldContinuationStrategy::evaluate(const StrategyContext& con
         return result;
     }
 
-    if (result.confidence < 0.70) {
+    // ------------------------------------------------------------------
+    // Filtros de qualidade mínima
+    // ------------------------------------------------------------------
+
+    if (result.confidence < config_.minConfidenceRegimeHold) {
         result.side = SignalSide::HOLD;
         result.reason = "regime hold continuation confidence below min";
         result.isValid = false;
@@ -90,12 +117,20 @@ SignalResult RegimeHoldContinuationStrategy::evaluate(const StrategyContext& con
         return result;
     }
 
+    // ------------------------------------------------------------------
+    // Sinal LONG
+    // ------------------------------------------------------------------
+
     if (longFlow && longBook && longMove) {
         result.side = SignalSide::LONG;
         result.reason = "long regime hold continuation detected";
         result.isValid = true;
         return result;
     }
+
+    // ------------------------------------------------------------------
+    // Sinal SHORT
+    // ------------------------------------------------------------------
 
     if (shortFlow && shortBook && shortMove) {
         result.side = SignalSide::SHORT;
@@ -110,13 +145,17 @@ SignalResult RegimeHoldContinuationStrategy::evaluate(const StrategyContext& con
     return result;
 }
 
+// =============================================================================
+// Filtros
+// =============================================================================
+
 bool RegimeHoldContinuationStrategy::isSpreadAcceptable(const StrategyContext& context) const {
     return context.marketSnapshot.spreadBps <= config_.maxSpreadBps;
 }
 
 bool RegimeHoldContinuationStrategy::isRegimeStrongEnough(const StrategyContext& context) const {
-    return context.regimeSnapshot.shortRangeBps >= 1.20 &&
-           context.regimeSnapshot.activityBps >= 1.20 &&
+    return context.regimeSnapshot.shortRangeBps >= config_.regimeMinShortRangeBps &&
+           context.regimeSnapshot.activityBps >= config_.regimeMinActivityBps &&
            context.regimeSnapshot.hasRecentFlow;
 }
 
@@ -139,66 +178,85 @@ bool RegimeHoldContinuationStrategy::isShortBookAligned(const StrategyContext& c
 }
 
 bool RegimeHoldContinuationStrategy::isLongMoveConfirmed(const StrategyContext& context) const {
-    return context.recentMoveBps >= 0.50 &&
+    return context.recentMoveBps >= config_.minRecentMoveBps &&
            context.recentMoveBps <= config_.maxRecentMoveBps;
 }
 
 bool RegimeHoldContinuationStrategy::isShortMoveConfirmed(const StrategyContext& context) const {
-    return context.recentMoveBps <= -0.50 &&
+    return context.recentMoveBps <= -config_.minRecentMoveBps &&
            std::abs(context.recentMoveBps) <= config_.maxRecentMoveBps;
 }
 
-double RegimeHoldContinuationStrategy::calculateConfidence(const StrategyContext& context) const {
+// =============================================================================
+// Cálculo de confiança
+// =============================================================================
+
+double RegimeHoldContinuationStrategy::calculateConfidence(
+    const StrategyContext& context) const {
+
     const auto& snapshot = context.marketSnapshot;
     const auto& flow = context.flowSnapshot;
     const auto& regime = context.regimeSnapshot;
 
-    double flowBiasStrength = std::abs(flow.aggressionBias);
-    flowBiasStrength = std::clamp(flowBiasStrength, 0.0, 1.0);
+    const double flowBiasStrength = std::clamp(
+        std::abs(flow.aggressionBias), 0.0, 1.0);
 
-    double flowStrengthNorm = flow.totalAggressionQty / 5.0;
-    flowStrengthNorm = std::clamp(flowStrengthNorm, 0.0, 1.0);
+    const double flowStrengthNorm = std::clamp(
+        flow.totalAggressionQty / config_.rhFlowStrengthNormFactor, 0.0, 1.0);
 
-    double imbalanceStrength = std::abs(snapshot.imbalance - 50.0) / 50.0;
-    imbalanceStrength = std::clamp(imbalanceStrength, 0.0, 1.0);
+    const double imbalanceStrength = std::clamp(
+        std::abs(snapshot.imbalance - 50.0) / 50.0, 0.0, 1.0);
 
-    double regimeStrength = (regime.shortRangeBps + regime.activityBps) / 2.0;
-    double regimeStrengthNorm = std::clamp(regimeStrength / 5.0, 0.0, 1.0);
+    const double regimeRaw = (regime.shortRangeBps + regime.activityBps) / 2.0;
+    const double regimeStrengthNorm = std::clamp(
+        regimeRaw / config_.rhRegimeStrengthNormFactor, 0.0, 1.0);
 
-    double recentMoveStrength = std::abs(context.recentMoveBps) / 5.0;
-    recentMoveStrength = std::clamp(recentMoveStrength, 0.0, 1.0);
+    const double recentMoveStrength = std::clamp(
+        std::abs(context.recentMoveBps) / config_.rhRecentMoveNormFactor, 0.0, 1.0);
 
     const double confidence =
-        (flowBiasStrength * 0.20) +
-        (flowStrengthNorm * 0.15) +
-        (imbalanceStrength * 0.15) +
-        (regimeStrengthNorm * 0.30) +
-        (recentMoveStrength * 0.20);
+        (flowBiasStrength    * config_.rhConfidenceWeightFlowBias) +
+        (flowStrengthNorm    * config_.rhConfidenceWeightFlowStrength) +
+        (imbalanceStrength   * config_.rhConfidenceWeightImbalance) +
+        (regimeStrengthNorm  * config_.rhConfidenceWeightRegime) +
+        (recentMoveStrength  * config_.rhConfidenceWeightRecentMove);
 
     return std::clamp(confidence, 0.0, 1.0);
 }
 
-double RegimeHoldContinuationStrategy::calculateExpectedMoveBps(const StrategyContext& context) const {
+// =============================================================================
+// Cálculo de movimento esperado
+// =============================================================================
+
+double RegimeHoldContinuationStrategy::calculateExpectedMoveBps(
+    const StrategyContext& context) const {
+
     const auto& snapshot = context.marketSnapshot;
     const auto& flow = context.flowSnapshot;
     const auto& regime = context.regimeSnapshot;
 
-    const double flowBiasComponent = std::abs(flow.aggressionBias) * 12.0;
-    const double flowStrengthComponent = std::min(flow.totalAggressionQty, 6.0) * 1.2;
-    const double imbalanceComponent = std::abs(snapshot.imbalance - 50.0) * 0.18;
-    const double regimeComponent = (regime.shortRangeBps + regime.activityBps) * 6.0;
-    const double moveComponent = std::abs(context.recentMoveBps) * 3.5;
+    const double flowBiasComponent =
+        std::abs(flow.aggressionBias) * config_.rhExpectedMoveFlowBiasFactor;
 
-    double expectedMove =
+    const double flowStrengthComponent =
+        std::min(flow.totalAggressionQty, config_.rhFlowStrengthCapForMove) *
+        config_.rhExpectedMoveFlowStrengthFactor;
+
+    const double imbalanceComponent =
+        std::abs(snapshot.imbalance - 50.0) * config_.rhExpectedMoveImbalanceFactor;
+
+    const double regimeComponent =
+        (regime.shortRangeBps + regime.activityBps) * config_.rhExpectedMoveRegimeFactor;
+
+    const double moveComponent =
+        std::abs(context.recentMoveBps) * config_.rhExpectedMoveMoveFactor;
+
+    const double expectedMove =
         flowBiasComponent +
         flowStrengthComponent +
         imbalanceComponent +
         regimeComponent +
         moveComponent;
 
-    if (expectedMove < 0.0) {
-        expectedMove = 0.0;
-    }
-
-    return expectedMove;
+    return std::max(expectedMove, 0.0);
 }

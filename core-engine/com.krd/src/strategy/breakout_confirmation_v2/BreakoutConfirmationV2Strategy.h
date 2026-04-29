@@ -1,16 +1,35 @@
 #pragma once
 
-#include "../../config/Config.h"
-#include "../common/ISignalStrategy.h"
+#include "com.krd/src/config/StrategyConfig.h"
+#include "com.krd/src/domain/SignalResult.h"
+#include "com.krd/src/strategy/common/StrategyContext.h"
 
-class BreakoutConfirmationV2Strategy : public ISignalStrategy {
+// =============================================================================
+// BreakoutConfirmationV2Strategy
+//
+// Responsabilidade: avaliar o contexto de mercado e gerar sinal de entrada
+// baseado em breakout com confirmação de fluxo, book e regime.
+//
+// Condições para sinal LONG:
+//   - Regime tradable
+//   - Spread aceitável
+//   - Breakout UP válido (CONFIRMED_UP, faixa dentro do range, não consumido)
+//   - Fluxo confirmando compra
+//   - Book com imbalance favorável a compra
+//   - Confiança acima do mínimo
+//   - ExpectedMove acima do mínimo
+//
+// Condições para sinal SHORT: simétricas para baixo.
+// =============================================================================
+
+class BreakoutConfirmationV2Strategy {
 public:
-    explicit BreakoutConfirmationV2Strategy(const Config& config);
+    explicit BreakoutConfirmationV2Strategy(const StrategyConfig& config);
 
-    SignalResult evaluate(const StrategyContext& context) const override;
+    SignalResult evaluate(const StrategyContext& context) const;
 
 private:
-    const Config& config_;
+    const StrategyConfig& config_;
 
     bool isSpreadAcceptable(const StrategyContext& context) const;
     bool isRegimeSupportive(const StrategyContext& context) const;
@@ -23,9 +42,6 @@ private:
 
     bool isBookSupportiveUp(const StrategyContext& context) const;
     bool isBookSupportiveDown(const StrategyContext& context) const;
-
-    bool isBreakoutStateUsableUp(const StrategyContext& context) const;
-    bool isBreakoutStateUsableDown(const StrategyContext& context) const;
 
     double calculateConfidence(const StrategyContext& context) const;
     double calculateExpectedMoveBps(const StrategyContext& context) const;

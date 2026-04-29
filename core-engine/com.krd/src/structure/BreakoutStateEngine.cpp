@@ -2,6 +2,9 @@
 
 #include <algorithm>
 
+BreakoutStateEngine::BreakoutStateEngine(const Config& config)
+    : config_(config) {}
+
 BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
                                           const PriceStructureSnapshot& structure) {
     const std::string key = makeKey(snapshot.exchange, snapshot.symbol);
@@ -14,8 +17,15 @@ BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
         state.phase = BreakoutPhase::IDLE;
     }
 
+    // ------------------------------------------------------------------
+    // Novo breakout para cima
+    // ------------------------------------------------------------------
     if (structure.isBreakoutUp) {
-        if (!state.active || state.phase == BreakoutPhase::IDLE || state.phase == BreakoutPhase::FAILED) {
+        // Inicia novo breakout se estava inativo ou falhou
+        if (!state.active ||
+            state.phase == BreakoutPhase::IDLE ||
+            state.phase == BreakoutPhase::FAILED) {
+
             state.phase = BreakoutPhase::BREAK_UP;
             state.breakPrice = snapshot.midPrice;
             state.lastConfirmedPrice = snapshot.midPrice;
@@ -28,17 +38,28 @@ BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
             return state;
         }
 
-        if (state.phase == BreakoutPhase::BREAK_UP || state.phase == BreakoutPhase::HOLD_UP) {
+        // Confirma breakout que estava em BREAK ou HOLD
+        if (state.phase == BreakoutPhase::BREAK_UP ||
+            state.phase == BreakoutPhase::HOLD_UP) {
+
             state.phase = BreakoutPhase::CONFIRMED_UP;
             state.lastConfirmedPrice = snapshot.midPrice;
-            state.highestPriceAfterBreak = std::max(state.highestPriceAfterBreak, snapshot.midPrice);
-            state.lowestPriceAfterBreak = std::min(state.lowestPriceAfterBreak, snapshot.midPrice);
+            state.highestPriceAfterBreak =
+                std::max(state.highestPriceAfterBreak, snapshot.midPrice);
+            state.lowestPriceAfterBreak =
+                std::min(state.lowestPriceAfterBreak, snapshot.midPrice);
             return state;
         }
     }
 
+    // ------------------------------------------------------------------
+    // Novo breakout para baixo
+    // ------------------------------------------------------------------
     if (structure.isBreakoutDown) {
-        if (!state.active || state.phase == BreakoutPhase::IDLE || state.phase == BreakoutPhase::FAILED) {
+        if (!state.active ||
+            state.phase == BreakoutPhase::IDLE ||
+            state.phase == BreakoutPhase::FAILED) {
+
             state.phase = BreakoutPhase::BREAK_DOWN;
             state.breakPrice = snapshot.midPrice;
             state.lastConfirmedPrice = snapshot.midPrice;
@@ -51,32 +72,49 @@ BreakoutState BreakoutStateEngine::update(const MarketSnapshot& snapshot,
             return state;
         }
 
-        if (state.phase == BreakoutPhase::BREAK_DOWN || state.phase == BreakoutPhase::HOLD_DOWN) {
+        if (state.phase == BreakoutPhase::BREAK_DOWN ||
+            state.phase == BreakoutPhase::HOLD_DOWN) {
+
             state.phase = BreakoutPhase::CONFIRMED_DOWN;
             state.lastConfirmedPrice = snapshot.midPrice;
-            state.highestPriceAfterBreak = std::max(state.highestPriceAfterBreak, snapshot.midPrice);
-            state.lowestPriceAfterBreak = std::min(state.lowestPriceAfterBreak, snapshot.midPrice);
+            state.highestPriceAfterBreak =
+                std::max(state.highestPriceAfterBreak, snapshot.midPrice);
+            state.lowestPriceAfterBreak =
+                std::min(state.lowestPriceAfterBreak, snapshot.midPrice);
             return state;
         }
     }
 
+    // ------------------------------------------------------------------
+    // Acompanhamento de breakout ativo (sem novo breakout neste snapshot)
+    // ------------------------------------------------------------------
     if (state.active) {
-        state.highestPriceAfterBreak = std::max(state.highestPriceAfterBreak, snapshot.midPrice);
-        state.lowestPriceAfterBreak = std::min(state.lowestPriceAfterBreak, snapshot.midPrice);
+        state.highestPriceAfterBreak =
+            std::max(state.highestPriceAfterBreak, snapshot.midPrice);
+        state.lowestPriceAfterBreak =
+            std::min(state.lowestPriceAfterBreak, snapshot.midPrice);
 
-        if (snapshot.midPrice <= structure.recentHigh && snapshot.midPrice >= structure.recentLow) {
+        // Preço voltou para dentro da faixa anterior
+        const bool insideRange =
+            snapshot.midPrice <= structure.recentHigh &&
+            snapshot.midPrice >= structure.recentLow;
+
+        if (insideRange) {
             state.returnedInsideRange = true;
 
-            if (state.phase == BreakoutPhase::BREAK_UP || state.phase == BreakoutPhase::CONFIRMED_UP) {
+            if (state.phase == BreakoutPhase::BREAK_UP ||
+                state.phase == BreakoutPhase::CONFIRMED_UP) {
                 state.phase = BreakoutPhase::HOLD_UP;
-            } else if (state.phase == BreakoutPhase::BREAK_DOWN || state.phase == BreakoutPhase::CONFIRMED_DOWN) {
+            } else if (state.phase == BreakoutPhase::BREAK_DOWN ||
+                       state.phase == BreakoutPhase::CONFIRMED_DOWN) {
                 state.phase = BreakoutPhase::HOLD_DOWN;
             }
         }
 
+        // Se o preço ficou dentro por mais do que o timeout configurado → FAILED
         if (state.returnedInsideRange) {
             const std::int64_t ageMs = snapshot.timestampMs - state.breakTimestampMs;
-            if (ageMs > 5000) {
+            if (ageMs > config_.breakoutFailedTimeoutMs) {
                 state.phase = BreakoutPhase::FAILED;
                 state.active = false;
             }
