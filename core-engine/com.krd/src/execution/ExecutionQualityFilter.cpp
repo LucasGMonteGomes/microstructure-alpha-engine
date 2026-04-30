@@ -22,11 +22,9 @@ double ExecutionQualityFilter::estimateTotalCostBps(const MarketSnapshot& snapsh
     return feeBps + slippageBps + spreadPenaltyBps;
 }
 
-double ExecutionQualityFilter::estimateRequiredMoveBps(const MarketSnapshot& snapshot) const {
+double ExecutionQualityFilter::estimateRequiredMoveBps(
+    const MarketSnapshot& snapshot) const {
+
     const double totalCostBps = estimateTotalCostBps(snapshot);
-
-    // buffer econômico mínimo acima do custo
-    const double safetyBufferBps = 8.0;
-
-    return totalCostBps + safetyBufferBps;
+    return totalCostBps + config_.executionSafetyBufferBps;
 }

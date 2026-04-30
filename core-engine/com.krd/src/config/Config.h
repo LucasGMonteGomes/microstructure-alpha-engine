@@ -66,22 +66,39 @@ struct Config {
     // Filtro de execução
     // -------------------------------------------------------------------------
 
-    // Movimento esperado mínimo em basis points para justificar entrada após custos.
-    double minExpectedMoveBps{25.0};
+    // Buffer mínimo de segurança em bps acima do custo total estimado
+    // para permitir entrada. Usado pelo ExecutionQualityFilter.
+    double executionSafetyBufferBps{8.0};
 
     // -------------------------------------------------------------------------
     // PaperTradeEngine — simulação de execução
     // -------------------------------------------------------------------------
 
     // Alvo de saída em porcentagem acima/abaixo do preço de entrada.
-    double targetPct{0.70};
+    double targetPct{0.03};
 
     // Stop de saída em porcentagem abaixo/acima do preço de entrada.
-    double stopPct{0.25};
+    double stopPct{0.025};
 
     // Timeout máximo da operação em milissegundos.
     // Após esse tempo sem atingir alvo ou stop, a posição é encerrada.
-    long timeoutMs{15000};
+    long timeoutMs{20000};
+
+    // -------------------------------------------------------------------------
+    // Saída antecipada por inércia
+    //
+    // Se o trade não se moveu o suficiente após earlyExitAfterMs milissegundos,
+    // considera que não tem direção e fecha para economizar custo de carregamento.
+    // -------------------------------------------------------------------------
+
+    // Tempo mínimo (ms) que o trade precisa ter aberto antes de avaliar inércia.
+    // Deve ser menor que timeoutMs. Recomendado: metade do timeoutMs.
+    long earlyExitAfterMs{10000};
+
+    // Gross PnL mínimo (%) para considerar que o trade está se movendo na direção certa.
+    // Se após earlyExitAfterMs o gross estiver abaixo desse valor, fecha antecipadamente.
+    // Deve ser menor que targetPct. Recomendado: ~1/3 do targetPct.
+    double earlyExitMinGrossPct{0.005};
 
     // -------------------------------------------------------------------------
     // Custos de simulação

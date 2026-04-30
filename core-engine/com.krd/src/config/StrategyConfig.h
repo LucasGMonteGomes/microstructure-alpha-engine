@@ -26,7 +26,7 @@ struct StrategyConfig {
     double maxRecentMoveBps{80.0};
 
     // Movimento esperado mínimo em basis points para justificar entrada após custos.
-    double minExpectedMoveBps{25.0};
+    double minExpectedMoveBps{12.0};
 
     // Imbalance mínimo (%) para considerar o book favorável a compra.
     double imbalanceLongThreshold{58.0};
@@ -35,7 +35,7 @@ struct StrategyConfig {
     double imbalanceShortThreshold{42.0};
 
     // Viés mínimo absoluto do fluxo agressor para confirmar direção.
-    double minFlowBiasAbs{0.68};
+    double minFlowBiasAbs{0.72};
 
     // Volume mínimo de agressão recente para considerar o fluxo ativo.
     double minFlowStrength{0.02};

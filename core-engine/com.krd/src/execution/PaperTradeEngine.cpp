@@ -11,7 +11,8 @@ const Position& PaperTradeEngine::getOpenPosition() const {
     return currentPosition_;
 }
 
-bool PaperTradeEngine::tryOpenPosition(const MarketSnapshot& snapshot, const SignalResult& signal) {
+bool PaperTradeEngine::tryOpenPosition(const MarketSnapshot& snapshot,
+                                       const SignalResult& signal) {
     if (currentPosition_.isOpen) {
         return false;
     }
@@ -38,50 +39,7 @@ bool PaperTradeEngine::tryOpenPosition(const MarketSnapshot& snapshot, const Sig
 }
 
 std::optional<TradeResult> PaperTradeEngine::update(const MarketSnapshot& snapshot,
-                                                    const SignalResult& latestSignal) {
-    if (!currentPosition_.isOpen) {
-        return std::nullopt;
-    }
-
-    if (snapshot.exchange != currentPosition_.exchange || snapshot.symbol != currentPosition_.symbol) {
-        return std::nullopt;
-    }
-
-    const double currentPrice = snapshot.midPrice;
-
-    if (currentPosition_.side == SignalSide::LONG) {
-        if (currentPrice >= currentPosition_.targetPrice) {
-            return closePosition(snapshot, ExitReason::TAKE_PROFIT);
-        }
-        if (currentPrice <= currentPosition_.stopPrice) {
-            return closePosition(snapshot, ExitReason::STOP_LOSS);
-        }
-    } else if (currentPosition_.side == SignalSide::SHORT) {
-        if (currentPrice <= currentPosition_.targetPrice) {
-            return closePosition(snapshot, ExitReason::TAKE_PROFIT);
-        }
-        if (currentPrice >= currentPosition_.stopPrice) {
-            return closePosition(snapshot, ExitReason::STOP_LOSS);
-        }
-    }
-
-    // Invalidação por fluxo desativada temporariamente.
-    // O objetivo agora é deixar a operação chegar em TAKE_PROFIT, STOP_LOSS ou TIMEOUT.
-    /*
-    if (shouldExitEarly(latestSignal)) {
-        return closePosition(snapshot, ExitReason::INVALIDATION);
-    }
-    */
-
-    if (snapshot.timestampMs >= currentPosition_.timeoutTimestampMs) {
-        return closePosition(snapshot, ExitReason::TIMEOUT);
-    }
-
-    return std::nullopt;
-}
-
-std::optional<TradeResult> PaperTradeEngine::forceClosePosition(const MarketSnapshot& snapshot,
-                                                                ExitReason reason) {
+                                                     const SignalResult& latestSignal) {
     if (!currentPosition_.isOpen) {
         return std::nullopt;
     }
@@ -89,12 +47,101 @@ std::optional<TradeResult> PaperTradeEngine::forceClosePosition(const MarketSnap
     if (snapshot.exchange != currentPosition_.exchange ||
         snapshot.symbol != currentPosition_.symbol) {
         return std::nullopt;
+    }
+
+    const double currentPrice = snapshot.midPrice;
+
+    // ------------------------------------------------------------------
+    // Take profit
+    // ------------------------------------------------------------------
+    if (currentPosition_.side == SignalSide::LONG) {
+        if (currentPrice >= currentPosition_.targetPrice) {
+            return closePosition(snapshot, ExitReason::TAKE_PROFIT);
         }
+    } else if (currentPosition_.side == SignalSide::SHORT) {
+        if (currentPrice <= currentPosition_.targetPrice) {
+            return closePosition(snapshot, ExitReason::TAKE_PROFIT);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Stop loss
+    // ------------------------------------------------------------------
+    if (currentPosition_.side == SignalSide::LONG) {
+        if (currentPrice <= currentPosition_.stopPrice) {
+            return closePosition(snapshot, ExitReason::STOP_LOSS);
+        }
+    } else if (currentPosition_.side == SignalSide::SHORT) {
+        if (currentPrice >= currentPosition_.stopPrice) {
+            return closePosition(snapshot, ExitReason::STOP_LOSS);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Saída antecipada por inércia
+    // Trade aberto há mais de earlyExitAfterMs sem mover o suficiente.
+    // Fecha para evitar carregar custo até o timeout.
+    // ------------------------------------------------------------------
+    if (shouldExitByInertia(snapshot)) {
+        return closePosition(snapshot, ExitReason::INVALIDATION);
+    }
+
+    // ------------------------------------------------------------------
+    // Timeout
+    // ------------------------------------------------------------------
+    if (snapshot.timestampMs >= currentPosition_.timeoutTimestampMs) {
+        return closePosition(snapshot, ExitReason::TIMEOUT);
+    }
+
+    return std::nullopt;
+}
+
+std::optional<TradeResult> PaperTradeEngine::forceClosePosition(
+    const MarketSnapshot& snapshot, ExitReason reason) {
+
+    if (!currentPosition_.isOpen) {
+        return std::nullopt;
+    }
+
+    if (snapshot.exchange != currentPosition_.exchange ||
+        snapshot.symbol != currentPosition_.symbol) {
+        return std::nullopt;
+    }
 
     return closePosition(snapshot, reason);
 }
 
-double PaperTradeEngine::calculateGrossPnlPct(const Position& position, double exitPrice) const {
+// =============================================================================
+// Saída antecipada por inércia
+// =============================================================================
+
+bool PaperTradeEngine::shouldExitByInertia(const MarketSnapshot& snapshot) const {
+    if (!currentPosition_.isOpen) {
+        return false;
+    }
+
+    const std::int64_t elapsedMs =
+        snapshot.timestampMs - currentPosition_.entryTimestampMs;
+
+    // Ainda não passou o tempo mínimo para avaliar inércia
+    if (elapsedMs < config_.earlyExitAfterMs) {
+        return false;
+    }
+
+    // Calcula o gross PnL atual
+    const double grossPnlPct =
+        calculateGrossPnlPct(currentPosition_, snapshot.midPrice);
+
+    // Se o gross está abaixo do mínimo esperado, o trade está inerte
+    return grossPnlPct < config_.earlyExitMinGrossPct;
+}
+
+// =============================================================================
+// Cálculo de PnL
+// =============================================================================
+
+double PaperTradeEngine::calculateGrossPnlPct(const Position& position,
+                                               double exitPrice) const {
     if (position.entryPrice <= 0.0) {
         return 0.0;
     }
@@ -116,7 +163,12 @@ double PaperTradeEngine::calculateNetPnlPct(double grossPnlPct) const {
     return grossPnlPct - totalFees - totalSlippage;
 }
 
-double PaperTradeEngine::buildTargetPrice(const MarketSnapshot& snapshot, SignalSide side) const {
+// =============================================================================
+// Construção de preços de alvo e stop
+// =============================================================================
+
+double PaperTradeEngine::buildTargetPrice(const MarketSnapshot& snapshot,
+                                           SignalSide side) const {
     const double factor = config_.targetPct / 100.0;
 
     if (side == SignalSide::LONG) {
@@ -130,7 +182,8 @@ double PaperTradeEngine::buildTargetPrice(const MarketSnapshot& snapshot, Signal
     return snapshot.midPrice;
 }
 
-double PaperTradeEngine::buildStopPrice(const MarketSnapshot& snapshot, SignalSide side) const {
+double PaperTradeEngine::buildStopPrice(const MarketSnapshot& snapshot,
+                                         SignalSide side) const {
     const double factor = config_.stopPct / 100.0;
 
     if (side == SignalSide::LONG) {
@@ -144,27 +197,12 @@ double PaperTradeEngine::buildStopPrice(const MarketSnapshot& snapshot, SignalSi
     return snapshot.midPrice;
 }
 
-bool PaperTradeEngine::shouldExitEarly(const SignalResult& latestSignal) const {
-    if (!currentPosition_.isOpen) {
-        return false;
-    }
+// =============================================================================
+// Fechamento de posição
+// =============================================================================
 
-    if (currentPosition_.side == SignalSide::LONG) {
-        if (latestSignal.flowBias < 0.05) {
-            return true;
-        }
-    }
-
-    if (currentPosition_.side == SignalSide::SHORT) {
-        if (latestSignal.flowBias > -0.05) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-TradeResult PaperTradeEngine::closePosition(const MarketSnapshot& snapshot, ExitReason reason) {
+TradeResult PaperTradeEngine::closePosition(const MarketSnapshot& snapshot,
+                                             ExitReason reason) {
     TradeResult result;
     result.exchange = currentPosition_.exchange;
     result.symbol = currentPosition_.symbol;
