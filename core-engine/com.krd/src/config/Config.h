@@ -18,10 +18,10 @@ struct Config {
 
     // Duração total do teste em milissegundos.
     // Exemplos:
-    //   5  * 60 * 1000 =  5 minutos
-    //   15 * 60 * 1000 = 15 minutos
-    //   60 * 60 * 1000 =  1 hora
-    long testDurationMs{15L * 60L * 1000L};
+    //int duration = 5  * 60 * 1000 // 5 minutos
+    int duration = 15 * 60 * 1000; // 15 minutos
+    //int duration 60 * 60 * 1000 // 1 hora
+    long testDurationMs{duration};
 
     // -------------------------------------------------------------------------
     // Janelas de dados

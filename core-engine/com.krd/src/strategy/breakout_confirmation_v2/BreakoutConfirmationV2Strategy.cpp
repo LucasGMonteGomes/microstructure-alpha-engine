@@ -102,7 +102,7 @@ SignalResult BreakoutConfirmationV2Strategy::evaluate(const StrategyContext& con
     // Filtros de qualidade mínima
     // ------------------------------------------------------------------
 
-    if (result.confidence < config_.minConfidence) {
+    if (result.confidence < config_.minConfidenceBreakout) {
         result.side = SignalSide::HOLD;
         result.reason = "breakout confirmation v2 confidence below min";
         result.isValid = false;

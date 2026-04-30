@@ -552,7 +552,7 @@ int main() {
     // ==========================================================================
 
     std::cout << "[SYSTEM] Microstructure Alpha Engine iniciado." << std::endl;
-    std::cout << "[SYSTEM] Duração do teste: " << (config.testDurationMs / 1000) << "s" << std::endl;
+    std::cout << "[SYSTEM] Duracao do teste: " << (config.testDurationMs / 1000) << "s" << std::endl;
 
     binance_ws.start();
     bybit_ws.start();
